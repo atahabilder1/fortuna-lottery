@@ -228,4 +228,74 @@ contract FortunaLottery is Ownable, ReentrancyGuard {
             && block.timestamp >= lottery.startTime
             && block.timestamp <= lottery.endTime;
     }
+
+    /*//////////////////////////////////////////////////////////////
+                        LOTTERY CREATION FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Create a new lottery
+     * @param name Name of the lottery
+     * @param tokensPerParticipant Number of tokens each participant receives
+     * @param startTime Unix timestamp when lottery starts
+     * @param endTime Unix timestamp when lottery ends
+     * @param itemNames Array of item names
+     * @param itemDescriptions Array of item descriptions
+     * @return lotteryId The ID of the newly created lottery
+     * @dev Only owner can create lotteries
+     */
+    function createLottery(
+        string memory name,
+        uint256 tokensPerParticipant,
+        uint256 startTime,
+        uint256 endTime,
+        string[] memory itemNames,
+        string[] memory itemDescriptions
+    ) external onlyOwner returns (uint256 lotteryId) {
+        require(startTime < endTime, "Invalid time range");
+        require(itemNames.length > 0, "Must have at least one item");
+        require(itemNames.length == itemDescriptions.length, "Array length mismatch");
+        require(tokensPerParticipant > 0, "Invalid token amount");
+
+        lotteryId = lotteryCounter++;
+        Lottery storage lottery = lotteries[lotteryId];
+
+        lottery.id = lotteryId;
+        lottery.name = name;
+        lottery.tokensPerParticipant = tokensPerParticipant;
+        lottery.startTime = startTime;
+        lottery.endTime = endTime;
+        lottery.itemCount = itemNames.length;
+        lottery.isActive = true;
+
+        // Add items to the lottery
+        for (uint256 i = 0; i < itemNames.length; i++) {
+            lottery.items[i] = LotteryItem({
+                name: itemNames[i],
+                description: itemDescriptions[i],
+                totalTokens: 0,
+                winner: address(0),
+                winnerSelected: false
+            });
+        }
+
+        currentLotteryId = lotteryId;
+
+        emit LotteryCreated(
+            lotteryId, itemNames.length, tokensPerParticipant, startTime, endTime
+        );
+
+        return lotteryId;
+    }
+
+    /**
+     * @notice End a lottery early
+     * @param lotteryId The ID of the lottery to end
+     * @dev Only owner can end lotteries
+     */
+    function endLottery(uint256 lotteryId) external onlyOwner {
+        Lottery storage lottery = lotteries[lotteryId];
+        require(lottery.isActive, "Lottery not active");
+        lottery.isActive = false;
+    }
 }
