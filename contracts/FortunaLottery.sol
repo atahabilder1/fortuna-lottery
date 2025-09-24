@@ -298,4 +298,130 @@ contract FortunaLottery is Ownable, ReentrancyGuard {
         require(lottery.isActive, "Lottery not active");
         lottery.isActive = false;
     }
+
+    /*//////////////////////////////////////////////////////////////
+                    PARTICIPANT & TOKEN FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Register as a participant in the lottery
+     * @param lotteryId The ID of the lottery to join
+     * @dev Participants receive tokens upon registration
+     */
+    function registerParticipant(uint256 lotteryId) external nonReentrant {
+        if (!isLotteryActive(lotteryId)) {
+            revert Lottery__NotActive();
+        }
+
+        Lottery storage lottery = lotteries[lotteryId];
+        ParticipantInfo storage participant = lottery.participants[msg.sender];
+
+        if (participant.registered) {
+            revert Lottery__AlreadyParticipated();
+        }
+
+        participant.registered = true;
+        participant.totalTokens = lottery.tokensPerParticipant;
+        participant.tokensUsed = 0;
+
+        lottery.participantList.push(msg.sender);
+
+        emit ParticipantRegistered(lotteryId, msg.sender, lottery.tokensPerParticipant);
+    }
+
+    /**
+     * @notice Place tokens on a specific item
+     * @param lotteryId The ID of the lottery
+     * @param itemId The ID of the item
+     * @param tokenAmount Number of tokens to place
+     * @dev Tokens can be placed multiple times on same item
+     */
+    function placeTokens(uint256 lotteryId, uint256 itemId, uint256 tokenAmount)
+        external
+        nonReentrant
+    {
+        if (!isLotteryActive(lotteryId)) {
+            revert Lottery__NotActive();
+        }
+
+        Lottery storage lottery = lotteries[lotteryId];
+        ParticipantInfo storage participant = lottery.participants[msg.sender];
+
+        if (!participant.registered) {
+            revert Lottery__AlreadyParticipated();
+        }
+
+        if (itemId >= lottery.itemCount) {
+            revert Lottery__InvalidItemId();
+        }
+
+        if (tokenAmount == 0) {
+            revert Lottery__InvalidTokenAmount();
+        }
+
+        uint256 remainingTokens = participant.totalTokens - participant.tokensUsed;
+        if (tokenAmount > remainingTokens) {
+            revert Lottery__InsufficientTokens();
+        }
+
+        participant.tokensUsed += tokenAmount;
+        participant.tokensPerItem[itemId] += tokenAmount;
+        lottery.items[itemId].totalTokens += tokenAmount;
+
+        emit TokensPlaced(lotteryId, msg.sender, itemId, tokenAmount);
+    }
+
+    /**
+     * @notice Place tokens on multiple items at once
+     * @param lotteryId The ID of the lottery
+     * @param itemIds Array of item IDs
+     * @param tokenAmounts Array of token amounts for each item
+     * @dev Arrays must be same length
+     */
+    function placeTokensBatch(
+        uint256 lotteryId,
+        uint256[] calldata itemIds,
+        uint256[] calldata tokenAmounts
+    ) external nonReentrant {
+        if (!isLotteryActive(lotteryId)) {
+            revert Lottery__NotActive();
+        }
+
+        require(itemIds.length == tokenAmounts.length, "Array length mismatch");
+
+        Lottery storage lottery = lotteries[lotteryId];
+        ParticipantInfo storage participant = lottery.participants[msg.sender];
+
+        if (!participant.registered) {
+            revert Lottery__AlreadyParticipated();
+        }
+
+        uint256 totalTokensToPlace = 0;
+        for (uint256 i = 0; i < tokenAmounts.length; i++) {
+            totalTokensToPlace += tokenAmounts[i];
+        }
+
+        uint256 remainingTokens = participant.totalTokens - participant.tokensUsed;
+        if (totalTokensToPlace > remainingTokens) {
+            revert Lottery__InsufficientTokens();
+        }
+
+        for (uint256 i = 0; i < itemIds.length; i++) {
+            uint256 itemId = itemIds[i];
+            uint256 tokenAmount = tokenAmounts[i];
+
+            if (itemId >= lottery.itemCount) {
+                revert Lottery__InvalidItemId();
+            }
+
+            if (tokenAmount > 0) {
+                participant.tokensPerItem[itemId] += tokenAmount;
+                lottery.items[itemId].totalTokens += tokenAmount;
+
+                emit TokensPlaced(lotteryId, msg.sender, itemId, tokenAmount);
+            }
+        }
+
+        participant.tokensUsed += totalTokensToPlace;
+    }
 }
