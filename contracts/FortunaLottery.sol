@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {VRFConsumerBaseV2Plus} from
+    "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
 /**
  * @title FortunaLottery
  * @author Anik Tahabilder
  * @notice A decentralized Chinese Lottery (probabilistic auction) contract
  * @dev Implements a lottery system where winners are chosen randomly with probability
- *      proportional to tokens placed
+ *      proportional to tokens placed using Chainlink VRF v2.5
  */
-contract FortunaLottery is Ownable, ReentrancyGuard {
+contract FortunaLottery is ReentrancyGuard, VRFConsumerBaseV2Plus {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -92,9 +94,26 @@ contract FortunaLottery is Ownable, ReentrancyGuard {
         address[] participantList;
     }
 
+    /// @notice Represents a VRF request for winner selection
+    struct VRFRequest {
+        uint256 lotteryId;
+        uint256 itemId;
+        bool fulfilled;
+    }
+
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
+
+    // Chainlink VRF Configuration
+    uint256 private immutable i_subscriptionId;
+    bytes32 private immutable i_keyHash;
+    uint32 private constant CALLBACK_GAS_LIMIT = 200000;
+    uint16 private constant REQUEST_CONFIRMATIONS = 3;
+    uint32 private constant NUM_WORDS = 1;
+
+    /// @notice Mapping from VRF request ID to VRF request details
+    mapping(uint256 => VRFRequest) private vrfRequests;
 
     /// @notice Counter for lottery IDs
     uint256 private lotteryCounter;
@@ -109,7 +128,17 @@ contract FortunaLottery is Ownable, ReentrancyGuard {
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor() Ownable(msg.sender) {
+    /**
+     * @notice Initialize the Fortuna Lottery contract
+     * @param vrfCoordinator Address of the Chainlink VRF Coordinator
+     * @param subscriptionId Chainlink VRF subscription ID
+     * @param keyHash Chainlink VRF key hash for gas lane
+     */
+    constructor(address vrfCoordinator, uint256 subscriptionId, bytes32 keyHash)
+        VRFConsumerBaseV2Plus(vrfCoordinator)
+    {
+        i_subscriptionId = subscriptionId;
+        i_keyHash = keyHash;
         lotteryCounter = 0;
         currentLotteryId = 0;
     }
@@ -423,5 +452,114 @@ contract FortunaLottery is Ownable, ReentrancyGuard {
         }
 
         participant.tokensUsed += totalTokensToPlace;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        CHAINLINK VRF FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Request random winner selection for an item
+     * @param lotteryId The ID of the lottery
+     * @param itemId The ID of the item
+     * @return requestId The Chainlink VRF request ID
+     * @dev Only owner can request winner selection after lottery ends
+     */
+    function requestWinner(uint256 lotteryId, uint256 itemId)
+        external
+        onlyOwner
+        returns (uint256 requestId)
+    {
+        Lottery storage lottery = lotteries[lotteryId];
+        LotteryItem storage item = lottery.items[itemId];
+
+        require(block.timestamp > lottery.endTime, "Lottery still active");
+        require(itemId < lottery.itemCount, "Invalid item ID");
+        require(!item.winnerSelected, "Winner already selected");
+        require(item.totalTokens > 0, "No tokens placed on item");
+
+        requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: i_keyHash,
+                subId: i_subscriptionId,
+                requestConfirmations: REQUEST_CONFIRMATIONS,
+                callbackGasLimit: CALLBACK_GAS_LIMIT,
+                numWords: NUM_WORDS,
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
+        );
+
+        vrfRequests[requestId] =
+            VRFRequest({lotteryId: lotteryId, itemId: itemId, fulfilled: false});
+
+        return requestId;
+    }
+
+    /**
+     * @notice Callback function called by Chainlink VRF with random number
+     * @param requestId The ID of the VRF request
+     * @param randomWords Array of random numbers from Chainlink VRF
+     * @dev This function is called automatically by Chainlink VRF
+     */
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords)
+        internal
+        override
+    {
+        VRFRequest storage request = vrfRequests[requestId];
+        require(!request.fulfilled, "Request already fulfilled");
+
+        Lottery storage lottery = lotteries[request.lotteryId];
+        LotteryItem storage item = lottery.items[request.itemId];
+
+        // Select winner based on weighted probability
+        address winner = _selectWeightedWinner(
+            lottery, request.itemId, randomWords[0]
+        );
+
+        item.winner = winner;
+        item.winnerSelected = true;
+        request.fulfilled = true;
+
+        emit WinnerSelected(request.lotteryId, request.itemId, winner, requestId);
+    }
+
+    /**
+     * @notice Select a winner based on weighted probability
+     * @param lottery The lottery storage reference
+     * @param itemId The item ID
+     * @param randomNumber Random number from Chainlink VRF
+     * @return winner Address of the selected winner
+     * @dev Uses weighted random selection based on tokens placed
+     */
+    function _selectWeightedWinner(
+        Lottery storage lottery,
+        uint256 itemId,
+        uint256 randomNumber
+    ) private view returns (address winner) {
+        LotteryItem storage item = lottery.items[itemId];
+        uint256 totalTokens = item.totalTokens;
+
+        // Get random position in token range
+        uint256 winningPosition = randomNumber % totalTokens;
+
+        // Find the participant who owns the token at winning position
+        uint256 cumulativeTokens = 0;
+        for (uint256 i = 0; i < lottery.participantList.length; i++) {
+            address participant = lottery.participantList[i];
+            uint256 participantTokens =
+                lottery.participants[participant].tokensPerItem[itemId];
+
+            if (participantTokens > 0) {
+                cumulativeTokens += participantTokens;
+                if (winningPosition < cumulativeTokens) {
+                    return participant;
+                }
+            }
+        }
+
+        // Should never reach here if logic is correct
+        revert("Winner selection failed");
     }
 }
