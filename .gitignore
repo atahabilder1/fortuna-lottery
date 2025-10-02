@@ -1,0 +1,30 @@
+# Claude Code
+.claude/
+
+# Node
+node_modules/
+npm-debug.log
+yarn.lock
+package-lock.json
+
+# Env
+.env
+.env.*
+
+# Foundry
+cache/
+out/
+
+# Backend
+/dist
+/prisma/migrations
+
+# Frontend
+.next/
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
