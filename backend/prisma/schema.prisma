@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Lottery {
+  id                   Int      @id @default(autoincrement())
+  contractLotteryId    Int      @unique
+  name                 String
+  tokensPerParticipant Int
+  startTime            DateTime
+  endTime              DateTime
+  itemCount            Int
+  isActive             Boolean
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  items        LotteryItem[]
+  participants Participant[]
+
+  @@index([contractLotteryId])
+  @@index([isActive])
+}
+
+model LotteryItem {
+  id                Int     @id @default(autoincrement())
+  lotteryId         Int
+  contractItemId    Int
+  name              String
+  description       String
+  totalTokens       Int     @default(0)
+  winner            String?
+  winnerSelected    Boolean @default(false)
+
+  lottery Lottery @relation(fields: [lotteryId], references: [id])
+
+  @@unique([lotteryId, contractItemId])
+  @@index([lotteryId])
+}
+
+model Participant {
+  id           Int    @id @default(autoincrement())
+  lotteryId    Int
+  address      String
+  totalTokens  Int
+  tokensUsed   Int    @default(0)
+  registered   Boolean @default(true)
+
+  lottery Lottery @relation(fields: [lotteryId], references: [id])
+
+  @@unique([lotteryId, address])
+  @@index([address])
+  @@index([lotteryId])
+}
