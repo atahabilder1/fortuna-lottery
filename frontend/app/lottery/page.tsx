@@ -2,30 +2,12 @@
 
 import { WalletButton } from '../../components/WalletButton';
 import { LotteryCard } from '../../components/LotteryCard';
+import { useCurrentLotteryId } from '@/lib/contracts';
 import Link from 'next/link';
+import { LotteryList } from '../../components/LotteryList';
 
 export default function LotteryDashboard() {
-  // Mock data - In production, fetch from contract
-  const lotteries = [
-    {
-      lotteryId: 0,
-      name: 'Summer Raffle 2025',
-      itemCount: 5,
-      tokensPerParticipant: 10,
-      startTime: Math.floor(Date.now() / 1000) - 86400,
-      endTime: Math.floor(Date.now() / 1000) + 86400 * 6,
-      isActive: true,
-    },
-    {
-      lotteryId: 1,
-      name: 'Spring Collection',
-      itemCount: 3,
-      tokensPerParticipant: 10,
-      startTime: Math.floor(Date.now() / 1000) - 86400 * 10,
-      endTime: Math.floor(Date.now() / 1000) - 86400,
-      isActive: false,
-    },
-  ];
+  const { data: currentLotteryId, isLoading, error } = useCurrentLotteryId();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -64,7 +46,18 @@ export default function LotteryDashboard() {
           </p>
         </div>
 
-        {lotteries.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-16">
+            <p className="text-gray-600 dark:text-gray-400">Loading lotteries...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <p className="text-red-600 dark:text-red-400 mb-4">Error loading lotteries</p>
+            <p className="text-sm text-gray-500 dark:text-gray-500">
+              Make sure you are connected to the correct network and the contract is deployed
+            </p>
+          </div>
+        ) : currentLotteryId === undefined || currentLotteryId === 0n ? (
           <div className="text-center py-16">
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               No lotteries available at the moment
@@ -74,11 +67,7 @@ export default function LotteryDashboard() {
             </p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lotteries.map((lottery) => (
-              <LotteryCard key={lottery.lotteryId} {...lottery} />
-            ))}
-          </div>
+          <LotteryList currentLotteryId={currentLotteryId} />
         )}
       </main>
 
