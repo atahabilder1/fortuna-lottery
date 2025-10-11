@@ -1,34 +1,53 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class LotteryService {
-  // Mock service - integrate with Prisma in production
+  constructor(private prisma: PrismaService) {}
 
-  findAll() {
+  async findAll() {
+    const lotteries = await this.prisma.lottery.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
     return {
-      data: [],
-      message: 'Lottery service ready. Integrate with Prisma for database access.'
+      data: lotteries,
+      message: 'Lotteries retrieved successfully',
     };
   }
 
-  findOne(id: number) {
+  async findOne(id: number) {
+    const lottery = await this.prisma.lottery.findUnique({
+      where: { id },
+      include: {
+        items: true,
+        participants: true,
+      },
+    });
     return {
-      data: null,
-      message: `Lottery ${id} service ready. Integrate with Prisma for database access.`
+      data: lottery,
+      message: lottery ? 'Lottery retrieved successfully' : 'Lottery not found',
     };
   }
 
-  getItems(lotteryId: number) {
+  async getItems(lotteryId: number) {
+    const items = await this.prisma.lotteryItem.findMany({
+      where: { lotteryId },
+      orderBy: { contractItemId: 'asc' },
+    });
     return {
-      data: [],
-      message: `Lottery ${lotteryId} items service ready.`
+      data: items,
+      message: 'Lottery items retrieved successfully',
     };
   }
 
-  getParticipants(lotteryId: number) {
+  async getParticipants(lotteryId: number) {
+    const participants = await this.prisma.participant.findMany({
+      where: { lotteryId },
+      orderBy: { totalTokens: 'desc' },
+    });
     return {
-      data: [],
-      message: `Lottery ${lotteryId} participants service ready.`
+      data: participants,
+      message: 'Participants retrieved successfully',
     };
   }
 }
