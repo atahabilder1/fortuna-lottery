@@ -37,17 +37,12 @@ It is fair, fun, and demonstrates randomness-based smart contract logic.
 - **wagmi v2 + RainbowKit + viem** (wallet connection & contract interaction)  
 - **Hosted on Vercel (free tier)**  
 
-### Backend (optional but impressive)
-- **Node.js v22** runtime  
-- **NestJS** framework (modular, enterprise-grade)  
-- **PostgreSQL + Prisma** (database & ORM)  
-- **Subsquid indexer** (lightweight alternative to The Graph)  
+### Backend
+- **Node.js v22** runtime
+- **NestJS** framework (modular, enterprise-grade)
+- **PostgreSQL + Prisma** (database & ORM)
+- **viem** for blockchain event indexing
 - **Hosted on Render or Railway (free tier)**  
-
-### DevOps / Infra
-- **GitHub Actions** (CI/CD for tests & linting)  
-- **Alchemy / Infura RPC** for Base Sepolia access  
-- **Slither + Echidna + Foundry Fuzzing** for security testing  
 
 ---
 
@@ -83,9 +78,6 @@ fortuna-lottery/
 │
 ├── docs/                    # Documentation
 │   └── architecture.md      # detailed design & diagrams
-│
-├── .github/workflows/       # GitHub Actions (CI/CD)
-│   └── ci.yml
 │
 ├── .gitignore               # ignores node_modules, builds, envs
 ├── foundry.toml             # Foundry config
@@ -135,6 +127,8 @@ forge script script/DeployLottery.s.sol   --rpc-url $BASE_SEPOLIA_RPC   --broadc
 ```bash
 cd frontend
 npm install
+cp .env.example .env
+# Edit .env and add your CONTRACT_ADDRESS and WALLET_CONNECT_PROJECT_ID
 npm run dev
 ```
 
@@ -142,30 +136,53 @@ Then open: `http://localhost:3000`
 
 ---
 
-### Backend (Optional)
+### Backend
 
+1. Set up PostgreSQL database
+2. Configure environment:
 ```bash
 cd backend
 npm install
+cp .env.example .env
+# Edit .env with your DATABASE_URL, CONTRACT_ADDRESS, and RPC_URL
+```
+
+3. Run Prisma migrations:
+```bash
+npm run prisma:generate
+npm run prisma:push
+```
+
+4. Start the backend:
+```bash
 npm run start:dev
 ```
+
+The backend will automatically start indexing blockchain events and sync with the database.
 
 ---
 
 ## 🔑 Environment Variables
 
-`.env` (not checked into GitHub):
-
+**Frontend** (`.env`):
 ```ini
-# Foundry
-BASE_SEPOLIA_RPC=https://base-sepolia.g.alchemy.com/v2/your-key
-PRIVATE_KEY=0x....
-
-# Frontend
 NEXT_PUBLIC_CONTRACT_ADDRESS=0x...
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_project_id
+```
 
-# Backend
-DATABASE_URL=postgresql://user:pass@localhost:5432/lottery
+**Backend** (`.env`):
+```ini
+DATABASE_URL=postgresql://user:password@localhost:5432/fortuna_lottery?schema=public
+PORT=3001
+CONTRACT_ADDRESS=0x...
+RPC_URL=https://sepolia.base.org
+START_BLOCK=0
+```
+
+**Foundry** (`.env` in root):
+```ini
+BASE_SEPOLIA_RPC=https://base-sepolia.g.alchemy.com/v2/your-key
+PRIVATE_KEY=0x...
 ```
 
 ---
@@ -173,6 +190,9 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/lottery
 ## 📜 .gitignore
 
 ```gitignore
+# Claude Code
+.claude/
+
 # Node
 node_modules/
 npm-debug.log
@@ -181,7 +201,10 @@ package-lock.json
 
 # Env
 .env
-.env.*
+.env.local
+.env.development
+.env.production
+.env.test
 
 # Foundry
 cache/
@@ -191,6 +214,12 @@ out/
 /dist
 /prisma/migrations
 
+# Frontend
+.next/
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -198,13 +227,29 @@ Thumbs.db
 
 ---
 
-## 🎯 Features Demonstrated
-- Chinese Lottery mechanics (probabilistic auction)  
-- Secure randomness (Chainlink VRF)  
-- Frontend integration with wallets (RainbowKit + wagmi)  
-- Testnet deployment (Base Sepolia)  
-- Full-stack indexing (NestJS + PostgreSQL + Subsquid)  
-- Cutting-edge tooling (Foundry, Next.js 14, Tailwind, viem)  
+## 🎯 Features Implemented
+
+### Smart Contract
+- Chinese Lottery mechanics with weighted random selection
+- Chainlink VRF v2.5 for provably fair randomness
+- Gas-optimized batch token placement
+- Comprehensive error handling with custom errors
+- Full event emission for frontend/backend integration
+
+### Frontend
+- Wallet connection with RainbowKit
+- Real-time lottery data from smart contract
+- Participant registration interface
+- Token placement on lottery items
+- Live win probability calculation
+- Responsive design with TailwindCSS
+
+### Backend
+- Event indexing from Base Sepolia blockchain
+- PostgreSQL database with Prisma ORM
+- Real-time event watching and syncing
+- RESTful API for lottery data
+- Automatic database updates on chain events  
 
 ---
 
