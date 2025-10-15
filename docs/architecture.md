@@ -200,27 +200,147 @@ forge script script/DeployLottery.s.sol \
 # Add deployed contract address to subscription
 ```
 
+## Frontend Architecture
+
+### Tech Stack
+- **Next.js 14** with App Router
+- **wagmi v2** for blockchain interactions
+- **RainbowKit** for wallet connection
+- **viem** for Ethereum utilities
+- **TailwindCSS** for styling
+
+### Key Features
+- Wallet connection with multiple providers
+- Real-time contract data reading
+- Participant registration flow
+- Token placement interface
+- Live win probability calculations
+- Responsive design for all devices
+
+### Components
+- `LotteryList`: Displays all active lotteries
+- `LotteryCard`: Individual lottery preview card
+- `LotteryItems`: Shows items within a lottery
+- `WalletButton`: Custom RainbowKit wallet connector
+
+### Contract Integration
+Uses custom React hooks from `lib/contracts/hooks.ts`:
+- `useCurrentLotteryId()` - Get total lottery count
+- `useLotteryInfo(lotteryId)` - Fetch lottery details
+- `useItemInfo(lotteryId, itemId)` - Get item information
+- `useParticipantInfo(lotteryId, address)` - User participation data
+- `useRegisterParticipant()` - Register for lottery
+- `usePlaceTokens()` - Place tokens on items
+- `usePlaceTokensBatch()` - Batch token placement
+
+## Backend Architecture
+
+### Tech Stack
+- **NestJS** framework
+- **Prisma ORM** with PostgreSQL
+- **viem** for blockchain event indexing
+- **TypeScript** for type safety
+
+### Database Schema (Prisma)
+
+```prisma
+model Lottery {
+  id                   Int      @id @default(autoincrement())
+  contractLotteryId    Int      @unique
+  name                 String
+  tokensPerParticipant Int
+  startTime            DateTime
+  endTime              DateTime
+  itemCount            Int
+  isActive             Boolean
+  items                LotteryItem[]
+  participants         Participant[]
+}
+
+model LotteryItem {
+  id                Int     @id @default(autoincrement())
+  lotteryId         Int
+  contractItemId    Int
+  name              String
+  description       String
+  totalTokens       Int
+  winner            String?
+  winnerSelected    Boolean
+  lottery           Lottery @relation(fields: [lotteryId], references: [id])
+}
+
+model Participant {
+  id           Int
+  lotteryId    Int
+  address      String
+  totalTokens  Int
+  tokensUsed   Int
+  registered   Boolean
+  lottery      Lottery @relation(fields: [lotteryId], references: [id])
+}
+```
+
+### Event Indexing Service
+
+The `IndexerService` automatically:
+1. **Indexes historical events** on startup from START_BLOCK
+2. **Watches for new events** in real-time
+3. **Syncs to PostgreSQL** via Prisma
+
+**Events tracked:**
+- `LotteryCreated` - New lottery created
+- `ParticipantRegistered` - User registers
+- `TokensPlaced` - Tokens placed on items
+- `WinnerSelected` - Winner chosen by VRF
+
+### API Endpoints
+
+- `GET /lottery` - List all lotteries
+- `GET /lottery/:id` - Get lottery by ID
+- `GET /lottery/:id/items` - Get lottery items
+- `GET /lottery/:id/participants` - Get participants
+
+Swagger documentation at `/api`
+
+## System Integration Flow
+
+```
+User Wallet
+    ↓
+Frontend (Next.js)
+    ↓
+Smart Contract (Base Sepolia)
+    ↓
+Blockchain Events
+    ↓
+Backend Indexer (NestJS)
+    ↓
+PostgreSQL Database
+    ↓
+REST API
+    ↓
+Frontend / External Apps
+```
+
 ## Future Enhancements
 
 ### Smart Contract
-- [ ] Multi-token support (ERC20/ERC721 prizes)
-- [ ] Automatic winner selection at end time
-- [ ] Participant refunds for cancelled lotteries
-- [ ] Lottery templates for recurring events
-- [ ] On-chain prize distribution
+- Multi-token support (ERC20/ERC721 prizes)
+- Automatic winner selection at end time
+- Participant refunds for cancelled lotteries
+- Lottery templates for recurring events
 
-### Frontend (Planned)
-- [ ] Next.js 14 with App Router
-- [ ] RainbowKit wallet connection
-- [ ] Real-time lottery status updates
-- [ ] Participant dashboard with token management
-- [ ] Winner announcement animations
+### Frontend
+- Winner announcement animations
+- Historical lottery archive
+- Advanced filtering and search
+- User analytics dashboard
 
-### Backend (Planned)
-- [ ] NestJS API for lottery metadata
-- [ ] PostgreSQL for historical data
-- [ ] Subsquid indexer for blockchain events
-- [ ] WebSocket for live updates
+### Backend
+- WebSocket for live updates
+- Caching layer (Redis)
+- GraphQL API option
+- Admin dashboard
 
 ## Technical Stack
 
