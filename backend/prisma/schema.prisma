@@ -56,3 +56,54 @@ model Participant {
   @@index([address])
   @@index([lotteryId])
 }
+
+// ZK-specific models for private betting
+
+model Commitment {
+  id               Int      @id @default(autoincrement())
+  lotteryId        Int
+  itemId           Int
+  commitment       String   @unique   // The commitment hash
+  nullifierHash    String   @unique   // For preventing double-use
+  tokenAmount      Int                // Number of tokens in this bet
+  merkleIndex      Int                // Position in Merkle tree
+  ticketRangeStart Int                // Start of ticket range
+  ticketRangeEnd   Int                // End of ticket range
+  merkleRoot       String             // Merkle root after this commitment
+  blockNumber      Int                // Block where commitment was added
+  transactionHash  String             // Transaction hash
+  createdAt        DateTime @default(now())
+
+  @@index([lotteryId, itemId])
+  @@index([commitment])
+  @@index([merkleIndex])
+}
+
+model MerkleTree {
+  id            Int      @id @default(autoincrement())
+  lotteryId     Int      @unique
+  currentRoot   String             // Current Merkle root
+  leafCount     Int      @default(0)
+  depth         Int      @default(20)
+  updatedAt     DateTime @updatedAt
+
+  // Store filled subtrees for proof generation
+  filledSubtrees String[] @default([])
+
+  @@index([lotteryId])
+}
+
+model WinningPosition {
+  id              Int      @id @default(autoincrement())
+  lotteryId       Int
+  itemId          Int
+  winningPosition Int
+  totalTokens     Int
+  prizeClaimed    Boolean  @default(false)
+  claimNullifier  String?  // Set when prize is claimed
+  recipientAddress String? // Where prize was sent
+  createdAt       DateTime @default(now())
+
+  @@unique([lotteryId, itemId])
+  @@index([lotteryId])
+}

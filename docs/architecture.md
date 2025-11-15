@@ -322,6 +322,104 @@ REST API
 Frontend / External Apps
 ```
 
+## Zero-Knowledge Privacy Layer
+
+The ZK-enabled version (`FortunaLotteryZK.sol`) adds privacy to the lottery using zero-knowledge proofs.
+
+### Privacy Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ZK PRIVACY FLOW                          │
+├─────────────────────────────────────────────────────────────┤
+│  1. COMMIT                                                  │
+│     User creates: commitment = Poseidon(secret, nullifier,  │
+│                                          itemId, amount, salt)│
+│     Only commitment goes on-chain (bet details hidden)      │
+├─────────────────────────────────────────────────────────────┤
+│  2. STORE                                                   │
+│     Commitment added to Merkle tree                         │
+│     Ticket range assigned: [start, end)                     │
+│     Item total tokens updated (aggregate visible)           │
+├─────────────────────────────────────────────────────────────┤
+│  3. DRAW                                                    │
+│     Chainlink VRF generates random number                   │
+│     winningPosition = random % totalTokens                  │
+├─────────────────────────────────────────────────────────────┤
+│  4. CLAIM                                                   │
+│     Winner generates ZK proof showing:                      │
+│     - Commitment is in Merkle tree                          │
+│     - Ticket range includes winning position                │
+│     - Nullifier prevents double-claim                       │
+│     Prize sent to any chosen address (anonymous)            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### ZK Circuits (Circom)
+
+| Circuit | Purpose | Location |
+|---------|---------|----------|
+| `bet_commitment.circom` | Prove valid bet commitment | `circuits/commitment/` |
+| `winner_proof.circom` | Prove ownership of winning ticket | `circuits/winner/` |
+| `merkle_proof.circom` | Verify Merkle tree membership | `circuits/merkle/` |
+| `poseidon.circom` | SNARK-friendly hash function | `circuits/poseidon/` |
+
+### ZK Contract Structure
+
+```solidity
+// FortunaLotteryZK.sol key components:
+
+// Commitment storage
+mapping(uint256 => mapping(uint256 => bool)) public betNullifierUsed;
+mapping(uint256 => mapping(uint256 => bool)) public claimNullifierUsed;
+
+// Merkle tree (inherited from IncrementalMerkleTree)
+uint256 public currentRoot;
+uint256 public nextLeafIndex;
+
+// Place bet with ZK proof
+function placeBetZK(
+    uint256 lotteryId,
+    uint256[8] calldata proof,    // Groth16 proof
+    uint256 commitment,            // Poseidon hash
+    uint256 nullifierHash,         // Prevents double-betting
+    uint256 itemId,
+    uint256 tokenAmount
+) external;
+
+// Claim prize anonymously
+function claimPrize(
+    uint256 lotteryId,
+    uint256 itemId,
+    uint256[8] calldata proof,    // Winner proof
+    uint256 claimNullifierHash,
+    address recipientAddress       // Can be any address
+) external;
+```
+
+### Frontend ZK Integration
+
+```
+frontend/lib/zk/
+├── types.ts      # TypeScript types for ZK operations
+├── hash.ts       # Poseidon hash implementation
+├── secrets.ts    # Secret generation and storage
+├── prover.ts     # Proof generation (mock for testing)
+└── index.ts      # Exports
+```
+
+### Privacy Guarantees
+
+| Data | Visibility |
+|------|------------|
+| Registration | Public (address known) |
+| Which item you bet on | **Hidden** |
+| How many tokens per item | **Hidden** |
+| Aggregate tokens per item | Public |
+| Winner identity | **Hidden** (anonymous claim) |
+
+---
+
 ## Future Enhancements
 
 ### Smart Contract
@@ -329,6 +427,7 @@ Frontend / External Apps
 - Automatic winner selection at end time
 - Participant refunds for cancelled lotteries
 - Lottery templates for recurring events
+- Production ZK verifiers (compiled from circuits)
 
 ### Frontend
 - Winner announcement animations

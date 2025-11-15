@@ -6,9 +6,61 @@ Complete setup instructions for running Fortuna Lottery locally or deploying to 
 
 - [Node.js v22+](https://nodejs.org/)
 - [Foundry](https://book.getfoundry.sh/) - `curl -L https://foundry.paradigm.xyz | bash`
-- [PostgreSQL](https://www.postgresql.org/) (for backend)
-- [Base Sepolia ETH](https://faucet.circle.com/) (for deployment)
-- [Chainlink VRF Subscription](https://vrf.chain.link/) (for deployment)
+- [PostgreSQL](https://www.postgresql.org/) (for backend, optional for local testing)
+
+**For Testnet Deployment (Free):**
+- [Base Sepolia ETH](https://faucet.circle.com/) - Free from faucet
+- [Test LINK tokens](https://faucets.chain.link/base-sepolia) - Free from faucet
+- [Chainlink VRF Subscription](https://vrf.chain.link/)
+
+---
+
+## Local Testing (Fastest, Free)
+
+Run everything locally with no blockchain costs using Anvil (local Ethereum node).
+
+### Option 1: One-Command Setup
+
+```bash
+# Run everything automatically
+./scripts/local-test.sh
+```
+
+### Option 2: Manual Setup
+
+**Terminal 1 - Start Local Blockchain:**
+```bash
+anvil
+```
+
+**Terminal 2 - Deploy Contracts:**
+```bash
+# Deploy ZK lottery with mock verifiers
+forge script script/DeployLocalZK.s.sol --rpc-url http://localhost:8545 --broadcast
+```
+
+**Terminal 3 - Start Frontend:**
+```bash
+cd frontend
+# Update .env with contract address from deployment output
+npm run dev
+```
+
+### Connect MetaMask to Local Chain
+
+1. Open MetaMask → Settings → Networks → Add Network
+2. Enter:
+   - Network Name: `Anvil Local`
+   - RPC URL: `http://localhost:8545`
+   - Chain ID: `31337`
+   - Currency: `ETH`
+3. Import test account with private key:
+   ```
+   0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+   ```
+   (This account has 10,000 test ETH)
+
+---
 
 ## Quick Start
 
@@ -81,6 +133,26 @@ forge script script/DeployLottery.s.sol \
    - Select your subscription
    - Click "Add consumer"
    - Enter your deployed contract address
+
+### Deploy ZK Version (Privacy-Enabled)
+
+The ZK version requires mock verifiers for testing (production would need compiled circuits):
+
+```bash
+# Deploy with mock verifiers (for testing)
+forge script script/DeployLocalZK.s.sol \
+  --rpc-url $BASE_SEPOLIA_RPC \
+  --broadcast \
+  --verify
+```
+
+This deploys:
+- `FortunaLotteryZK` - Main ZK lottery contract
+- `MockBetVerifier` - Mock bet proof verifier
+- `MockWinnerVerifier` - Mock winner proof verifier
+- `MockVRFCoordinator` - Mock VRF for testing
+
+---
 
 ## Frontend Setup
 

@@ -1,240 +1,418 @@
-# 🎟️ Fortuna Lottery
+# Fortuna Lottery
 
-> A full-stack decentralized lottery application implementing the Chinese Lottery (weighted random selection) on Base Sepolia, featuring Chainlink VRF for provably fair randomness.
+A privacy-preserving decentralized lottery platform built on Ethereum, combining the fairness of Chainlink VRF with the privacy of zero-knowledge proofs.
 
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.25-blue)](https://soliditylang.org/)
-[![Foundry](https://img.shields.io/badge/Foundry-Latest-red)](https://book.getfoundry.sh/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-10-E0234E)](https://nestjs.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+## Table of Contents
 
-## 📖 Overview
+- [Introduction](#introduction)
+- [How It Works](#how-it-works)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Smart Contracts](#smart-contracts)
+- [Zero-Knowledge Proofs](#zero-knowledge-proofs)
+- [Frontend Application](#frontend-application)
+- [Backend Services](#backend-services)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Documentation](#documentation)
+- [License](#license)
 
-Fortuna Lottery is a decentralized application that modernizes the traditional **Chinese Lottery** (also known as Chinese Auction or Penny Social). Unlike standard auctions where the highest bidder wins, this system uses **weighted random selection** — participants' winning chances are proportional to the tokens they place on items.
+---
 
-**Example:** If an item has 50 tokens total and you place 10 tokens, you have a 20% chance to win.
+## Introduction
 
-### 🎯 Why This Project?
+Fortuna Lottery reimagines the traditional lottery by solving two fundamental problems: fairness and privacy.
 
-This portfolio project demonstrates:
-- **Smart contract development** with Solidity 0.8.25
-- **Blockchain integration** using Chainlink VRF v2.5 for verifiable randomness
-- **Modern frontend** with Next.js 14, wagmi v2, and RainbowKit
-- **Backend architecture** with NestJS, Prisma, and PostgreSQL
-- **Full-stack Web3 development** from smart contracts to UI/UX
-- **Production-ready code** with comprehensive tests and documentation
+Traditional lotteries suffer from trust issues. Participants must believe the operator isn't manipulating results. Even blockchain-based lotteries, while transparent, expose every participant's betting strategy to the world. If you place a large bet, everyone sees it. Your competitors can adjust their strategy. Your financial behavior becomes public record.
 
-## ✨ Features
+Fortuna solves both problems. Chainlink VRF provides cryptographically verifiable randomness that no one can manipulate. Zero-knowledge proofs hide your bets while still proving their validity. You can participate, win, and claim prizes without anyone knowing which bets were yours.
 
-### Smart Contract
-- ✅ Chinese Lottery mechanics with weighted random selection
-- ✅ Chainlink VRF v2.5 for provably fair randomness
-- ✅ Gas-optimized batch token placement
-- ✅ Comprehensive error handling and security patterns
-- ✅ Full test coverage (12 tests passing)
+The system implements a weighted lottery mechanism, sometimes called a Chinese Auction. Unlike winner-takes-all lotteries, your winning probability is proportional to your participation. Place 20% of the tokens on an item, and you have a 20% chance of winning it. This creates a fair, skill-based dynamic where strategy matters but luck still plays a role.
 
-### Frontend
-- ✅ Wallet connection with RainbowKit (MetaMask, WalletConnect, Coinbase)
-- ✅ Real-time lottery data from blockchain
-- ✅ Participant registration and token placement
-- ✅ Live win probability calculations
-- ✅ Responsive design with TailwindCSS
+---
 
-### Backend
-- ✅ Blockchain event indexing with viem
-- ✅ PostgreSQL database with Prisma ORM
-- ✅ Real-time event watching and syncing
-- ✅ RESTful API with Swagger documentation
-- ✅ Automatic database updates on chain events
+## How It Works
 
-## 🛠️ Tech Stack
+The lottery operates in four phases, each designed to balance transparency with privacy.
 
-<table>
-  <tr>
-    <td><b>Smart Contracts</b></td>
-    <td>Solidity 0.8.25 • Foundry • Chainlink VRF v2.5 • OpenZeppelin v5</td>
-  </tr>
-  <tr>
-    <td><b>Frontend</b></td>
-    <td>Next.js 14 • React 18 • TypeScript • wagmi v2 • RainbowKit • viem • TailwindCSS</td>
-  </tr>
-  <tr>
-    <td><b>Backend</b></td>
-    <td>NestJS • Node.js 22 • PostgreSQL • Prisma • viem • TypeScript</td>
-  </tr>
-  <tr>
-    <td><b>Deployment</b></td>
-    <td>Base Sepolia • Vercel (Frontend) • Railway/Render (Backend)</td>
-  </tr>
-</table>
+### Phase 1: Registration
 
-## 🚀 Quick Start
+When a lottery opens, participants connect their wallets and register. Upon registration, each participant receives an allocation of tokens. These tokens are the currency of the lottery, distributed equally to ensure fair starting conditions.
+
+Registration is the only public action. Your wallet address is recorded on-chain, confirming you're a participant. Everything after this point is private.
+
+### Phase 2: Private Betting
+
+This is where zero-knowledge proofs work their magic. When you decide to place tokens on an item, your browser generates a cryptographic commitment. Think of it as placing your bet inside a locked box that only you can open.
+
+The commitment is a hash of your bet details combined with random secrets:
+
+```
+commitment = Hash(secret, nullifier, itemId, tokenAmount, salt)
+```
+
+Only the commitment goes on-chain. The actual bet details stay in your browser. The smart contract knows a bet was placed and updates the total token count for that item, but it cannot determine who placed it or how many tokens they used.
+
+Your secrets are stored locally in your browser. Guard them carefully, as they're your proof of ownership if you win.
+
+### Phase 3: Random Selection
+
+When the lottery ends, the owner triggers winner selection for each item. This is where Chainlink VRF ensures fairness.
+
+The contract requests a random number from Chainlink's decentralized oracle network. This number is generated off-chain by multiple independent nodes, then verified on-chain. No single party can predict or manipulate it.
+
+The winning position is calculated as:
+
+```
+winningPosition = randomNumber % totalTokensOnItem
+```
+
+If an item received 100 tokens total, the winning position will be between 0 and 99. Whoever's bet range includes this position wins.
+
+### Phase 4: Anonymous Claiming
+
+Winners claim their prizes using zero-knowledge proofs. Your browser generates a proof demonstrating:
+
+1. You know the secret values behind a commitment in the Merkle tree
+2. Your bet's ticket range includes the winning position
+3. You haven't claimed this prize before (nullifier check)
+
+The contract verifies this proof without learning which commitment is yours. You can even specify a different wallet address to receive the prize, adding another layer of privacy.
+
+---
+
+## Technology Stack
+
+The project spans blockchain, cryptography, and web development.
+
+| Layer | Technologies |
+|-------|--------------|
+| Smart Contracts | Solidity 0.8.25, Foundry, OpenZeppelin |
+| Randomness | Chainlink VRF v2.5 |
+| Zero-Knowledge | Circom 2.1.6, Groth16, Poseidon Hash |
+| Frontend | Next.js 14, React 18, TypeScript |
+| Web3 Integration | wagmi v2, viem, RainbowKit |
+| Backend | NestJS 10, Node.js 22 |
+| Database | PostgreSQL, Prisma ORM |
+| Styling | TailwindCSS |
+| Network | Base Sepolia (L2 Testnet) |
+
+---
+
+## Project Structure
+
+```
+fortuna-lottery/
+├── circuits/                    # Zero-knowledge circuits
+│   ├── commitment/             # Bet commitment proofs
+│   ├── winner/                 # Winner claim proofs
+│   ├── merkle/                 # Merkle tree verification
+│   └── poseidon/               # Hash function
+├── contracts/                   # Solidity smart contracts
+│   ├── FortunaLottery.sol      # Public lottery (original)
+│   ├── FortunaLotteryZK.sol    # Private lottery (ZK-enabled)
+│   ├── lib/                    # Shared libraries
+│   ├── verifiers/              # Proof verification
+│   └── mocks/                  # Testing mocks
+├── frontend/                    # Next.js application
+│   ├── app/                    # Pages and routing
+│   ├── components/             # React components
+│   └── lib/                    # Utilities and hooks
+│       ├── contracts/          # Contract integration
+│       └── zk/                 # ZK proof generation
+├── backend/                     # NestJS API server
+│   ├── src/
+│   │   ├── lottery/            # Lottery endpoints
+│   │   ├── indexer/            # Event indexing
+│   │   └── prisma/             # Database access
+│   └── prisma/                 # Schema definitions
+├── test/                        # Contract tests
+├── script/                      # Deployment scripts
+└── docs/                        # Documentation
+```
+
+---
+
+## Getting Started
 
 ### Prerequisites
-- Node.js v22+
-- Foundry
-- PostgreSQL (for backend)
-- Base Sepolia ETH ([faucet](https://faucet.circle.com/))
 
-### Installation
+Ensure you have the following installed:
+
+- [Node.js](https://nodejs.org/) v22 or higher
+- [Foundry](https://book.getfoundry.sh/) for smart contract development
+- [PostgreSQL](https://www.postgresql.org/) for the backend database
+
+### Local Development
+
+The fastest way to explore the project is running everything locally. This requires no external services or blockchain interaction.
+
+**Step 1: Clone and install dependencies**
 
 ```bash
-# Clone repository
 git clone https://github.com/atahabilder1/fortuna-lottery.git
 cd fortuna-lottery
 
-# Install dependencies
 forge install
 cd frontend && npm install && cd ..
 cd backend && npm install && cd ..
 ```
 
-### Smart Contract
+**Step 2: Start a local blockchain**
+
+Open a terminal and run:
 
 ```bash
-# Compile
-forge build
-
-# Test
-forge test -vv
-
-# Deploy (requires .env configuration)
-forge script script/DeployLottery.s.sol --rpc-url $BASE_SEPOLIA_RPC --broadcast --verify
+anvil
 ```
 
-### Frontend
+This starts a local Ethereum node with pre-funded test accounts.
+
+**Step 3: Deploy contracts**
+
+In another terminal:
+
+```bash
+forge script script/DeployLocalZK.s.sol --rpc-url http://localhost:8545 --broadcast
+```
+
+Note the deployed contract address from the output.
+
+**Step 4: Start the frontend**
 
 ```bash
 cd frontend
-cp .env.example .env
-# Add CONTRACT_ADDRESS and WALLET_CONNECT_PROJECT_ID
+echo "NEXT_PUBLIC_CONTRACT_ADDRESS=<address-from-step-3>" > .env
 npm run dev
-# Open http://localhost:3000
 ```
 
-### Backend
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-```bash
-cd backend
-cp .env.example .env
-# Configure DATABASE_URL, CONTRACT_ADDRESS, RPC_URL
-npm run prisma:generate
-npm run prisma:push
-npm run start:dev
-# API at http://localhost:3001
+**Step 5: Connect a wallet**
+
+Configure MetaMask with the local network:
+- Network Name: Anvil Local
+- RPC URL: http://localhost:8545
+- Chain ID: 31337
+
+Import a test account using this private key:
+```
+0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
 
-📚 **Detailed setup instructions:** [docs/SETUP.md](docs/SETUP.md)
-
-## 📂 Project Structure
-
-```
-fortuna-lottery/
-├── contracts/          # Solidity smart contracts
-│   └── FortunaLottery.sol
-├── script/             # Deployment scripts
-├── test/               # Contract tests
-├── frontend/           # Next.js application
-│   ├── app/            # App Router pages
-│   ├── components/     # React components
-│   └── lib/contracts/  # Contract ABIs and hooks
-├── backend/            # NestJS API server
-│   ├── src/
-│   │   ├── lottery/    # Lottery module
-│   │   ├── prisma/     # Database service
-│   │   └── indexer/    # Event indexer
-│   └── prisma/         # Database schema
-└── docs/               # Documentation
-    ├── SETUP.md        # Setup guide
-    └── architecture.md # Technical details
-```
-
-## 🎨 How It Works
-
-1. **Lottery Creation** - Owner creates a lottery with items and token allocation
-2. **Registration** - Participants register to receive tokens
-3. **Token Placement** - Users distribute tokens across items (weighted bets)
-4. **Winner Selection** - Chainlink VRF generates random number for fair selection
-5. **Result** - Winner determined by weighted probability
-
-### Weighted Selection Example
-
-**Item A** has 30 total tokens:
-- Alice: 10 tokens → **33.3%** win chance
-- Bob: 5 tokens → **16.7%** win chance
-- Carol: 15 tokens → **50%** win chance
-
-VRF generates random number, and the winner is selected proportionally.
-
-## 🔐 Security
-
-- ✅ ReentrancyGuard for critical functions
-- ✅ Chainlink ownership pattern for access control
-- ✅ Input validation on all parameters
-- ✅ Custom errors for gas efficiency
-- ✅ Immutable VRF configuration
-- ✅ Comprehensive test coverage
-
-## 📊 Testing
-
-```bash
-# Run all tests
-forge test -vv
-
-# Gas report
-forge test --gas-report
-
-# Coverage
-forge coverage
-```
-
-**Test Results:** 12/12 tests passing ✅
-
-## 📖 Documentation
-
-- **[Setup Guide](docs/SETUP.md)** - Detailed installation and deployment instructions
-- **[Architecture](docs/architecture.md)** - Technical design and implementation details
-- **Smart Contract** - See [contracts/FortunaLottery.sol](contracts/FortunaLottery.sol)
-- **Tests** - See [test/FortunaLottery.t.sol](test/FortunaLottery.t.sol)
-
-## 🌐 Deployment
-
-- **Network:** Base Sepolia (Testnet)
-- **Contract:** Deploy with `forge script` (see [SETUP.md](docs/SETUP.md))
-- **Frontend:** Deploy to Vercel with one click
-- **Backend:** Deploy to Railway or Render
-
-## 🛣️ Roadmap
-
-- [ ] Multi-token support (ERC20/ERC721 prizes)
-- [ ] Automatic winner selection at lottery end time
-- [ ] Mainnet deployment (Base L2)
-- [ ] Mobile app with React Native
-- [ ] DAO governance for lottery parameters
-- [ ] Advanced analytics dashboard
-
-## 👨‍💻 Author
-
-**Anik Tahabilder**
-Blockchain Researcher | Smart Contract Security | Full-stack Web3 Developer
-
-- GitHub: [@atahabilder1](https://github.com/atahabilder1)
-- Portfolio: [anik.dev](https://anik.dev) *(coming soon)*
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This account has 10,000 test ETH.
 
 ---
 
-<div align="center">
+## Smart Contracts
 
-### ⭐ Star this repo if you find it helpful!
+The project includes two lottery implementations: a transparent version for understanding the mechanics, and a privacy-preserving version using zero-knowledge proofs.
 
-Built with ❤️ using Solidity, Foundry, Next.js, and Chainlink VRF
+### FortunaLottery.sol
 
-</div>
+The original implementation with full transparency. Useful for learning and testing basic functionality.
+
+Key functions:
+- `createLottery()` - Initialize a new lottery with items
+- `registerParticipant()` - Join and receive tokens
+- `placeTokens()` - Bet tokens on items
+- `requestWinner()` - Trigger VRF for random selection
+
+### FortunaLotteryZK.sol
+
+The privacy-enhanced version using ZK proofs.
+
+Key functions:
+- `register()` - Join the lottery (public)
+- `placeBetZK()` - Submit encrypted bet with proof
+- `claimPrize()` - Claim winnings anonymously
+
+### Supporting Contracts
+
+- `IncrementalMerkleTree.sol` - Efficient on-chain Merkle tree
+- `PoseidonT3.sol` - SNARK-friendly hash function
+- Mock contracts for local testing without external dependencies
+
+For detailed contract documentation, see [docs/architecture.md](docs/architecture.md).
+
+---
+
+## Zero-Knowledge Proofs
+
+The ZK system enables private betting and anonymous prize claims.
+
+### Circuits
+
+Written in Circom, the circuits define what can be proven:
+
+**Bet Commitment Circuit** (`circuits/commitment/bet_commitment.circom`)
+
+Proves that a commitment was correctly formed from valid bet data without revealing the data itself.
+
+**Winner Proof Circuit** (`circuits/winner/winner_proof.circom`)
+
+Proves ownership of the winning ticket by demonstrating:
+- Knowledge of a commitment's preimage
+- Merkle tree membership
+- Winning position falls within the bet's range
+- Nullifier uniqueness
+
+### Cryptographic Primitives
+
+**Poseidon Hash**: A hash function designed for efficiency inside ZK circuits. Standard hashes like SHA-256 require thousands of constraints; Poseidon needs only hundreds.
+
+**Merkle Trees**: All commitments are stored in an on-chain Merkle tree. This allows proving membership with logarithmic proof size regardless of the number of participants.
+
+**Nullifiers**: Unique values derived from secrets that prevent double-claiming without revealing identity.
+
+For circuit compilation and setup instructions, see [circuits/README.md](circuits/README.md).
+
+---
+
+## Frontend Application
+
+The frontend is built with Next.js 14 using the App Router pattern.
+
+### Key Features
+
+- Wallet connection supporting MetaMask, WalletConnect, and Coinbase Wallet
+- Real-time lottery data from on-chain reads
+- Client-side ZK proof generation
+- Local secret management for bet privacy
+
+### Architecture
+
+The application follows a modular structure:
+
+- `app/` - Page components and routing
+- `components/` - Reusable UI elements
+- `lib/contracts/` - Contract ABIs and React hooks
+- `lib/zk/` - Zero-knowledge proof utilities
+
+### ZK Integration
+
+The `lib/zk/` module handles all cryptographic operations:
+
+- `secrets.ts` - Generate and store betting secrets securely
+- `hash.ts` - Poseidon hash implementation for commitments
+- `prover.ts` - Generate proofs for betting and claiming
+
+---
+
+## Backend Services
+
+The NestJS backend provides event indexing and API services.
+
+### Event Indexer
+
+The indexer watches blockchain events and maintains a synchronized database:
+
+- Listens to lottery creation, registration, and betting events
+- Tracks Merkle tree state for proof generation
+- Stores commitment-to-position mappings
+
+### API Endpoints
+
+RESTful endpoints for querying lottery data:
+
+```
+GET /lottery              - List all lotteries
+GET /lottery/:id          - Lottery details
+GET /lottery/:id/items    - Items in a lottery
+GET /lottery/:id/participants - Registered participants
+```
+
+Swagger documentation available at `/api` when running locally.
+
+### Database Schema
+
+Prisma manages the PostgreSQL database with models for:
+
+- Lotteries and their configuration
+- Items and token totals
+- Participants and allocations
+- Commitments and Merkle positions (ZK)
+
+---
+
+## Testing
+
+### Smart Contract Tests
+
+Run the Foundry test suite:
+
+```bash
+forge test -vv
+```
+
+The test suite includes 25 tests covering:
+- Lottery creation and configuration
+- Participant registration
+- Token placement (public and ZK)
+- Winner selection mechanics
+- Prize claiming with proofs
+- Edge cases and access control
+
+For gas profiling:
+
+```bash
+forge test --gas-report
+```
+
+### Local Integration Testing
+
+The `scripts/local-test.sh` script automates full integration testing:
+
+```bash
+./scripts/local-test.sh
+```
+
+This compiles contracts, runs tests, starts Anvil, and deploys for manual testing.
+
+---
+
+## Deployment
+
+### Testnet Deployment
+
+For Base Sepolia testnet deployment:
+
+1. Get test ETH from [faucet.circle.com](https://faucet.circle.com/)
+2. Create a Chainlink VRF subscription at [vrf.chain.link](https://vrf.chain.link/)
+3. Fund the subscription with test LINK from [faucets.chain.link](https://faucets.chain.link/)
+
+Configure environment variables:
+
+```bash
+export BASE_SEPOLIA_RPC=https://sepolia.base.org
+export PRIVATE_KEY=your_private_key
+```
+
+Deploy:
+
+```bash
+forge script script/DeployLottery.s.sol --rpc-url $BASE_SEPOLIA_RPC --broadcast
+```
+
+Add the deployed contract as a VRF consumer in the Chainlink dashboard.
+
+For complete deployment instructions, see [docs/SETUP.md](docs/SETUP.md).
+
+---
+
+## Documentation
+
+- [Setup Guide](docs/SETUP.md) - Installation and configuration
+- [Architecture](docs/architecture.md) - Technical design details
+- [Circuit Documentation](circuits/README.md) - ZK circuit specifications
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+Developed by [Anik Tahabilder](https://github.com/atahabilder1)
